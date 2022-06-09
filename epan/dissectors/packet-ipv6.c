@@ -71,6 +71,7 @@ void proto_reg_handoff_ipv6(void);
 #define IP6OPT_QUICKSTART               0x26    /* 00 1 00110 =  38 */
 #define IP6OPT_PMTU                     0x30    /* 00 1 10000 =  48 */
 #define IP6OPT_IOAM                     0x31    /* 00 1 10001 =  49 */
+#define IP6OPT_PATH_TRACING             0x32    /* 00 1 10010 =  50 */
 #define IP6OPT_EXP_3E                   0x3E    /* 00 1 11110 =  62 */
 #define IP6OPT_TPF                      0x41    /* 01 0 00001 =  65 */
 #define IP6OPT_EXP_5E                   0x5E    /* 01 0 11110 =  94 */
@@ -91,6 +92,15 @@ void proto_reg_handoff_ipv6(void);
 #define IP6OPT_RTALERT_MLD              0       /* Datagram contains MLD msg */
 #define IP6OPT_RTALERT_RSVP             1       /* Datagram contains RSVP msg */
 #define IP6OPT_RTALERT_ACTNET           2       /* Datagram contains ACTNET msg */
+
+#define IP6OPT_SRH_PAD1                     0x00    /* 00 0 00000 =   0 */
+#define IP6OPT_SRH_IN_NODE                  0x01    /* 00 0 00001 =   1 */
+#define IP6OPT_SRH_EG_NODE                  0x02    /* 00 0 00010 =   2 */
+#define IP6OPT_SRH_OP_CONT                  0x03    /* 00 0 00011 =   3 */
+#define IP6OPT_SRH_PADN                     0x04    /* 00 0 00100 =   4 */
+#define IP6OPT_SRH_HMAC                     0x05    /* 00 0 00101 =   5 */
+#define IP6OPT_SRH_NSH_CAR                  0x06    /* 00 0 00110 =   6 */
+#define IP6OPT_SRH_PTSS                     0x80    /* 10 0 00000 = 128 */
 
 /* RPL Routing header */
 #define IP6RRPL_BITMASK_CMPRI     0xF0000000
@@ -201,6 +211,10 @@ static int hf_ipv6_opt_rtalert                  = -1;
 static int hf_ipv6_opt_pmtu_min                 = -1;
 static int hf_ipv6_opt_pmtu_rtn                 = -1;
 static int hf_ipv6_opt_pmtu_rtn_flag            = -1;
+static int hf_ipv6_opt_pt_mcd                   = -1;
+static int hf_ipv6_opt_pt_mcd_tts               = -1;
+static int hf_ipv6_opt_pt_mcd_oif               = -1;
+static int hf_ipv6_opt_pt_mcd_oil               = -1;
 static int hf_ipv6_opt_jumbo                    = -1;
 static int hf_ipv6_opt_calipso_doi              = -1;
 static int hf_ipv6_opt_calipso_cmpt_length      = -1;
@@ -350,6 +364,29 @@ static int hf_ipv6_routing_srh_flags            = -1;
 static int hf_ipv6_routing_srh_tag              = -1;
 static int hf_ipv6_routing_srh_addr             = -1;
 
+static int hf_ipv6_srh_opt                      = -1;
+static int hf_ipv6_srh_opt_type                 = -1;
+static int hf_ipv6_srh_opt_type_change          = -1;
+static int hf_ipv6_srh_opt_type_rest            = -1;
+static int hf_ipv6_routing_srh_opt_reserved     = -1;
+static int hf_ipv6_routing_srh_opt_hmac_d       = -1;
+static int hf_ipv6_routing_srh_opt_hmac_res     = -1;
+static int hf_ipv6_routing_srh_opt_hmac_key     = -1;
+static int hf_ipv6_routing_srh_opt_hmac         = -1;
+//static int hf_ipv6_routing_srh_opt_pad1         = -1;
+//static int hf_ipv6_routing_srh_opt_padN         = -1;
+static int hf_ipv6_routing_srh_opt_in_node      = -1;
+//static int hf_ipv6_routing_srh_opt_eg_node      = -1;
+static int hf_ipv6_routing_srh_opt_op_cont      = -1;
+static int hf_ipv6_routing_srh_opt_nsh_car      = -1;
+static int hf_ipv6_routing_srh_opt_ifid         = -1;
+static int hf_ipv6_routing_srh_opt_ifload       = -1;
+static int hf_ipv6_routing_srh_opt_timestamp    = -1;
+static int hf_ipv6_routing_srh_opt_timestamp_sec = -1;
+static int hf_ipv6_routing_srh_opt_timestamp_nsec = -1;
+static int hf_ipv6_routing_srh_opt_pt_sessid    = -1;
+static int hf_ipv6_routing_srh_opt_pt_seqnum    = -1;
+
 static int hf_ipv6_routing_crh16_current_sid      = -1;
 static int hf_ipv6_routing_crh32_current_sid      = -1;
 static int hf_ipv6_routing_crh16_segment_id     = -1;
@@ -392,6 +429,7 @@ static gint ett_ipv6_hopopts_proto      = -1;
 static gint ett_ipv6_fraghdr_proto      = -1;
 static gint ett_ipv6_routing_proto      = -1;
 static gint ett_ipv6_routing_srh_vect   = -1;
+static gint ett_ipv6_routing_srh_time   = -1;
 static gint ett_ipv6_fragments          = -1;
 static gint ett_ipv6_fragment           = -1;
 static gint ett_ipv6_dstopts_proto      = -1;
@@ -647,6 +685,7 @@ static const value_string ipv6_opt_type_vals[] = {
     { IP6OPT_EXP_1E,        "Experimental (0x1E)"           },
     { IP6OPT_QUICKSTART,    "Quick-Start"                   },
     { IP6OPT_PMTU,          "Path MTU Option"               },
+    { IP6OPT_PATH_TRACING,  "Path Tracing"                  },
     { IP6OPT_IOAM,          "IOAM Option"                   },
     { IP6OPT_EXP_3E,        "Experimental (0x3E)"           },
     { IP6OPT_TPF,           "Tunnel Payload Forwarding (TPF) Information" },
@@ -674,6 +713,19 @@ static const value_string ipv6_opt_rtalert_vals[] = {
     { IP6OPT_RTALERT_ACTNET,    "Active Network" },
     { 0, NULL }
 };
+
+static const value_string ipv6_opt_srh_vals[] = {
+    { IP6OPT_SRH_PAD1,          "Pad1"                     },
+    { IP6OPT_SRH_IN_NODE,       "Ingress Node"             },
+    { IP6OPT_SRH_EG_NODE,       "Egress Node"              },
+    { IP6OPT_SRH_OP_CONT,       "Opaque Container"         },
+    { IP6OPT_SRH_PADN,          "PadN"                     },
+    { IP6OPT_SRH_HMAC,          "HMAC"                     },
+    { IP6OPT_SRH_NSH_CAR,       "NSH Carrier"              },
+    { IP6OPT_SRH_PTSS,          "Path Tracing TLV"         },
+    { 0, NULL }
+};
+value_string_ext ipv6_opt_srh_vals_ext = VALUE_STRING_EXT_INIT(ipv6_opt_srh_vals);
 
 enum {
     IP6OPT_SMF_DPD_NULL = 0,
@@ -718,6 +770,7 @@ static const gint _ipv6_opt_type_hdr[][2] = {
     { IP6OPT_CALIPSO,       IPv6_OPT_HDR_HBH },
     { IP6OPT_SMF_DPD,       IPv6_OPT_HDR_HBH },
     { IP6OPT_PDM,           IPv6_OPT_HDR_DST },
+    { IP6OPT_PATH_TRACING,  IPv6_OPT_HDR_HBH },
     { IP6OPT_QUICKSTART,    IPv6_OPT_HDR_HBH },
     { IP6OPT_IOAM,          IPv6_OPT_HDR_HBH },
     { IP6OPT_TPF,           IPv6_OPT_HDR_DST },
@@ -1185,9 +1238,15 @@ dissect_routing6_srh(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *
     gint addr_offset;
     guint32 last_entry, addr_count;
 
-    proto_tree_add_item_ret_uint(tree, hf_ipv6_routing_srh_last_entry,
+    proto_item* ti;
+
+    ti = proto_tree_add_item_ret_uint(tree, hf_ipv6_routing_srh_last_entry,
                                     tvb, offset, 1, ENC_BIG_ENDIAN,
                                     &last_entry);
+    if (last_entry == 255) {
+        proto_item_append_text(ti, " [no SID list]");
+    }
+
     addr_count = last_entry + 1;
     offset += 1;
 
@@ -1196,6 +1255,12 @@ dissect_routing6_srh(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *
 
     proto_tree_add_item(tree, hf_ipv6_routing_srh_tag, tvb, offset, 2, ENC_NA);
     offset += 2;
+
+    if (last_entry == 255) {
+        expert_add_info_format(pinfo, tree, &ei_ipv6_routing_undecoded,
+            "Routing Header without SID list");
+        goto go_tlvs;
+    }
 
     if (rt->hdr.ip6r_segleft > addr_count) {
         expert_add_info_format(pinfo, rt->ti_segleft, &ei_ipv6_routing_invalid_segleft,
@@ -1212,7 +1277,133 @@ dissect_routing6_srh(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *
                 addr_offset, IPv6_ADDR_SIZE, tvb_get_ptr_ipv6(tvb, addr_offset), i);
     }
 
+
     /* TODO: dissect TLVs */
+    //offset = addr_offset + IPv6_ADDR_SIZE;
+    offset = offset + (addr_count * IPv6_ADDR_SIZE);
+    // ***** Prototipo di TLV dissector da sistemare bene quando funziona
+go_tlvs:
+    struct opt_proto_item {
+        proto_item* type, * len;
+    };
+
+    guint8          opt_type, opt_len;
+    gint srh_len;
+    //gint            opt_hdr_type;
+    const gchar* opt_name;
+    proto_item* pi, * opt_ti_type, * time_ti;
+    proto_tree* opt_tree, * opt_type_tree, * time_tree;
+    //struct opt_proto_item opt_ti;
+    nstime_t ts;                /* time structure with seconds and nanoseconds */
+
+    srh_len = ((rt->hdr.ip6r_len + 1) * 8) - 8;
+    //expert_add_info_format(pinfo, ti, &ei_ipv6_routing_undecoded,
+    //    "SRH offset: %d", offset);
+    while (offset < srh_len) {
+        /* there are more options */
+
+        opt_type = tvb_get_guint8(tvb, offset);
+        opt_len = tvb_get_guint8(tvb, offset + 1);
+        opt_name = val_to_str_ext(opt_type, &ipv6_opt_srh_vals_ext, "Unknown SRv6 Option (%u)");
+
+        pi = proto_tree_add_none_format(tree, hf_ipv6_srh_opt, tvb, offset, 2 + opt_len,
+            "%s", opt_name);
+        opt_tree = proto_item_add_subtree(pi, ett_ipv6_opt);
+
+        opt_ti_type = proto_tree_add_item(opt_tree, hf_ipv6_srh_opt_type, tvb, offset, 1, ENC_BIG_ENDIAN);
+        //opt_ti.type = proto_tree_add_item(opt_tree, hf_ipv6_opt_type, tvb, offset, 1, ENC_BIG_ENDIAN);
+        //opt_ti.len = proto_tree_add_item(opt_tree, hf_ipv6_opt_length, tvb, offset, 1, ENC_BIG_ENDIAN);
+        //proto_tree_add_item(tree, hf_ipv6_routing_srh_tlv_test, tvb, offset, 4, ENC_BIG_ENDIAN);
+
+
+        if (opt_type == IP6OPT_SRH_PAD1) {
+            /* The Pad1 option is a special case, and contains no data. */
+            proto_tree_add_item(opt_tree, hf_ipv6_opt_pad1, tvb, offset, 1, ENC_NA);
+            offset += 1;
+            continue;
+        }
+
+        opt_type_tree = proto_item_add_subtree(opt_ti_type, ett_ipv6_opt_type);
+        proto_tree_add_item(opt_type_tree, hf_ipv6_srh_opt_type_change, tvb, offset, 1, ENC_BIG_ENDIAN);
+        proto_tree_add_item(opt_type_tree, hf_ipv6_srh_opt_type_rest, tvb, offset, 1, ENC_BIG_ENDIAN);
+        offset += 1;
+
+        proto_tree_add_item(opt_tree, hf_ipv6_opt_length, tvb, offset, 1, ENC_BIG_ENDIAN);
+        offset += 1;
+
+        if (opt_type == IP6OPT_SRH_PADN) {
+            /* RFC 2460 states :
+             * "The PadN option is used to insert two or more octets of
+             * padding into the Options area of a header.  For N octets of
+             * padding, the Opt Data Len field contains the value N-2, and
+             * the Option Data consists of N-2 zero-valued octets."
+             */
+            proto_tree_add_item(opt_tree, hf_ipv6_opt_padn, tvb, offset, opt_len, ENC_NA);
+            offset += opt_len;
+            continue;
+        }
+
+        if (opt_type == IP6OPT_SRH_IN_NODE || opt_type == IP6OPT_SRH_EG_NODE) {
+            proto_tree_add_item(opt_tree, hf_ipv6_routing_srh_opt_reserved, tvb, offset, 1, ENC_NA);
+            proto_tree_add_item(opt_tree, hf_ipv6_routing_srh_flags, tvb, offset + 1, 1, ENC_NA);
+            proto_tree_add_item(opt_tree, hf_ipv6_routing_srh_addr, tvb, offset + 2, IPv6_ADDR_SIZE, ENC_NA);
+            offset += opt_len;
+            continue;
+        }
+
+        if (opt_type == IP6OPT_SRH_OP_CONT) {
+            proto_tree_add_item(opt_tree, hf_ipv6_routing_srh_opt_reserved, tvb, offset, 1, ENC_NA);
+            proto_tree_add_item(opt_tree, hf_ipv6_routing_srh_flags, tvb, offset + 1, 1, ENC_NA);
+            proto_tree_add_item(opt_tree, hf_ipv6_routing_srh_opt_op_cont, tvb, offset + 2, 16, ENC_NA);
+            offset += opt_len;
+            continue;
+        }
+
+        if (opt_type == IP6OPT_SRH_HMAC) {
+            proto_tree_add_item(opt_tree, hf_ipv6_routing_srh_opt_hmac_d, tvb, offset, 1, ENC_NA);
+            proto_tree_add_item(opt_tree, hf_ipv6_routing_srh_opt_hmac_res, tvb, offset, 2, ENC_NA);
+            proto_tree_add_item(opt_tree, hf_ipv6_routing_srh_opt_hmac_key, tvb, offset + 2, 4, ENC_NA);
+            proto_tree_add_item(opt_tree, hf_ipv6_routing_srh_opt_hmac, tvb, offset + 6, 32, ENC_NA);
+            offset += opt_len;
+            continue;
+        }
+
+        if (opt_type == IP6OPT_SRH_PTSS) {
+
+            /* Subtree for the timestamp-field */
+            ts.secs = tvb_get_ntohl(tvb, offset + 2);
+            ts.nsecs = tvb_get_ntohl(tvb, offset + 6);
+
+            proto_tree_add_item(opt_tree, hf_ipv6_routing_srh_opt_ifid, tvb, offset, 2, ENC_BIG_ENDIAN);
+            proto_tree_add_item(opt_tree, hf_ipv6_routing_srh_opt_ifload, tvb, offset, 2, ENC_BIG_ENDIAN);
+
+            time_ti = proto_tree_add_time(opt_tree, hf_ipv6_routing_srh_opt_timestamp, tvb, offset + 2, 8, &ts);
+            time_tree = proto_item_add_subtree(time_ti, ett_ipv6_routing_srh_time);
+            proto_tree_add_item(time_tree, hf_ipv6_routing_srh_opt_timestamp_sec, tvb, offset + 2, 4, ENC_BIG_ENDIAN);
+            proto_tree_add_item(time_tree, hf_ipv6_routing_srh_opt_timestamp_nsec, tvb, offset + 6, 4, ENC_BIG_ENDIAN);
+
+            proto_tree_add_item(opt_tree, hf_ipv6_routing_srh_opt_pt_sessid, tvb, offset + 10, 2, ENC_BIG_ENDIAN);
+            proto_tree_add_item(opt_tree, hf_ipv6_routing_srh_opt_pt_seqnum, tvb, offset + 12, 2, ENC_BIG_ENDIAN);
+            offset += opt_len;
+            continue;
+        }
+
+        if (opt_type == IP6OPT_SRH_NSH_CAR) {
+            proto_tree_add_item(opt_tree, hf_ipv6_routing_srh_opt_reserved, tvb, offset, 1, ENC_NA);
+            proto_tree_add_item(opt_tree, hf_ipv6_routing_srh_flags, tvb, offset + 1, 1, ENC_NA);
+            static dissector_handle_t nsh_handle;
+            tvbuff_t* nsh_tvb;
+            nsh_handle = find_dissector("nsh");
+            nsh_tvb = tvb_new_subset_length(tvb, offset + 2, opt_len - 2);
+            call_dissector(nsh_handle, nsh_tvb, pinfo, opt_tree);
+
+            //proto_tree_add_item(opt_tree, hf_ipv6_routing_srh_opt_nsh_car, tvb, offset+2, opt_len-2, ENC_NA);
+            offset += opt_len;
+            continue;
+        }
+    }
+    //   offset += 1;
+    // ***** Fine TLV
 
     return tvb_captured_length(tvb);
 }
@@ -1489,6 +1680,56 @@ dissect_opt_jumbo(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *op
     if (jumbo_plen < 65536) {
         expert_add_info(pinfo, ti, &ei_ipv6_opt_jumbo_truncated);
     }
+
+    return offset;
+}
+
+/*
+ * Path Tracing Option
+ *
+                                   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+                                   |  Option Type  |  Opt Data Len |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                                                               |
+   |                           MCD Stack                           |
+   |                                                               |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+   MCD (Midpoint Compressed Data)
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |        CMD.OIF        |CMD.OIL|    CMD.TTS    |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+*/
+static gint
+ dissect_opt_path_tracing(tvbuff_t * tvb, gint offset, packet_info * pinfo, proto_tree * opt_tree,
+    struct opt_proto_item* opt_ti, guint8 opt_len)
+     {
+    int mcd_num = 0;
+    proto_item* ti_mcd;
+    proto_tree* mcd_tree;
+    //static gint ett_pt_cmd = -1;
+
+    if (opt_len != 36) {
+        expert_add_info_format(pinfo, opt_ti->len, &ei_ipv6_opt_invalid_len,
+            "Path Tracing: Invalid length (%u bytes)", opt_len);
+    }
+
+    while (mcd_num < 12) {
+
+        // Cicla e analizza i MCD interni
+        ti_mcd = proto_tree_add_item(opt_tree, hf_ipv6_opt_pt_mcd, tvb, offset, 3, ENC_BIG_ENDIAN);
+        mcd_tree = proto_item_add_subtree(ti_mcd, ett_ipv6_opt);
+        proto_tree_add_item(mcd_tree, hf_ipv6_opt_pt_mcd_oif, tvb, offset, 2, ENC_NA);
+        proto_tree_add_item(mcd_tree, hf_ipv6_opt_pt_mcd_oil, tvb, offset, 2, ENC_NA);
+        proto_tree_add_item(mcd_tree, hf_ipv6_opt_pt_mcd_tts, tvb, offset + 2, 1, ENC_NA);
+
+        offset += 3;
+        mcd_num++;
+    }
+
+    //if (pt_offset == 0) {
+    //    expert_add_info(pinfo, ti, &ei_ipv6_opt_pt_offset_zero);
+    //}
 
     return offset;
 }
@@ -2556,6 +2797,9 @@ dissect_opts(tvbuff_t *tvb, int offset, proto_tree *tree, packet_info *pinfo, ws
         case IP6OPT_JUMBO:
             offset = dissect_opt_jumbo(tvb, offset, pinfo, opt_tree, &opt_ti, opt_len);
             break;
+        case IP6OPT_PATH_TRACING:
+            offset = dissect_opt_path_tracing(tvb, offset, pinfo, opt_tree, &opt_ti, opt_len);
+            break;
         case IP6OPT_RPL:
             offset = dissect_opt_rpl(tvb, offset, pinfo, opt_tree, &opt_ti, opt_len);
             break;
@@ -3494,6 +3738,26 @@ proto_register_ipv6(void)
                 FT_UINT32, BASE_DEC, NULL, 0x0,
                 "IPv6 (Jumbo) Payload Length", HFILL }
         },
+        { &hf_ipv6_opt_pt_mcd,
+            { "MCD - Midpoint Compressed Data", "ipv6.opt.pt_mcd",
+                FT_UINT24, BASE_HEX, NULL, 0x0,
+                "Path Tracing Midpoint Compressed Data", HFILL }
+        },
+        { &hf_ipv6_opt_pt_mcd_oif,
+            { "Interface ID", "ipv6.opt.pt_mcd_oif",
+                FT_UINT16, BASE_DEC_HEX, NULL, 0xFFF0,
+                "Path Tracing Interface ID", HFILL }
+        },
+        { &hf_ipv6_opt_pt_mcd_oil,
+            { "Interface Load", "ipv6.opt.pt_mcd_oil",
+                FT_UINT16, BASE_DEC, NULL, 0x000F,
+                "Path Tracing Interface Load", HFILL }
+        },
+        { &hf_ipv6_opt_pt_mcd_tts,
+            { "Truncated Timestamp", "ipv6.opt.pt_mcd_tts",
+                FT_UINT8, BASE_HEX_DEC, NULL, 0x0,
+                "Path Tracing Truncated PTP Timestamp", HFILL }
+        },
         { &hf_ipv6_opt_calipso_doi,
             { "CALIPSO Domain of Interpretation", "ipv6.opt.calipso.doi",
                 FT_UINT32, BASE_DEC, NULL, 0x0,
@@ -4198,6 +4462,104 @@ proto_register_ipv6(void)
                 "Segment address", HFILL }
         },
 
+        /* SRH TLVs*/
+        { &hf_ipv6_srh_opt,
+            { "SRv6 Option", "ipv6.routing.srh.opt",
+                FT_NONE, BASE_NONE, NULL, 0x0,
+                "Option", HFILL }
+        },
+        { &hf_ipv6_srh_opt_type,
+            { "Type", "ipv6.routing.srh.opt.type",
+                FT_UINT8, BASE_DEC | BASE_EXT_STRING, &ipv6_opt_srh_vals_ext, 0x0,
+                "Option type", HFILL }
+        },
+        { &hf_ipv6_srh_opt_type_change,
+            { "May Change", "ipv6.opt.type.change",
+                FT_BOOLEAN, 8, TFS(&tfs_yes_no), 0x80,
+                "Whether the option data may change en-route", HFILL }
+        },
+        { &hf_ipv6_srh_opt_type_rest,
+            { "Low-Order Bits", "ipv6.opt.type.rest",
+                FT_UINT8, BASE_HEX, NULL, 0x7F,
+                "Remaining low-order bits", HFILL }
+        },
+        { &hf_ipv6_routing_srh_opt_reserved,
+            { "Reserved", "ipv6.routing.srh.opt.reserved",
+                FT_BYTES, BASE_NONE, NULL, 0x0,
+                "Must be zero", HFILL }
+        },
+        { &hf_ipv6_routing_srh_opt_op_cont,
+            { "Opaque Container", "ipv6.routing.srh.op_cont",
+                FT_BYTES, BASE_NONE, NULL, 0x0,
+                "Opaque data not relevant for the routing layer", HFILL }
+        },
+        { &hf_ipv6_routing_srh_opt_in_node,
+            { "Option: Ingress Node", "ipv6.routing.srh.opt.in_node",
+                FT_UINT16, BASE_HEX_DEC, NULL, 0x0,
+                NULL, HFILL }
+        },
+        { &hf_ipv6_routing_srh_opt_hmac_d,
+            { "DA Verify disabled", "ipv6.routing.srh.opt.hmac_d",
+                FT_BOOLEAN, 8, TFS(&tfs_yes_no), 0x80,
+                "Destination Address verification is disabled", HFILL }
+        },
+        { &hf_ipv6_routing_srh_opt_hmac_res,
+            { "Reserved", "ipv6.routing.srh.opt.hmac_reserved",
+                FT_UINT16, BASE_HEX, NULL, 0x7FFF,
+                "Must be zero", HFILL }
+        },
+        { &hf_ipv6_routing_srh_opt_hmac_key,
+            { "HMAC Key ID", "ipv6.routing.srh.opt.hmac_key",
+                FT_UINT16, BASE_HEX, NULL, 0x0,
+                NULL, HFILL }
+        },
+        { &hf_ipv6_routing_srh_opt_hmac,
+            { "HMAC", "ipv6.routing.srh.opt.hmac",
+                FT_BYTES, BASE_NONE, NULL, 0x0,
+                NULL, HFILL }
+        },
+        { &hf_ipv6_routing_srh_opt_nsh_car,
+            { "NSH", "ipv6.routing.srh.opt.nsh",
+                FT_BYTES, BASE_NONE, NULL, 0x0,
+                "NSH Carrier", HFILL }
+        },
+
+        { &hf_ipv6_routing_srh_opt_ifid,
+            { "Interface ID", "ipv6.routing.srh.opt.ifid",
+                FT_UINT16, BASE_DEC_HEX, NULL, 0xFFF0,
+                "Interface ID", HFILL }
+        },
+        { &hf_ipv6_routing_srh_opt_ifload,
+            { "Interface Load", "ipv6.routing.srh.opt.ifload",
+                FT_UINT16, BASE_DEC, NULL, 0x000F,
+                "Interface Load", HFILL }
+        },
+        { &hf_ipv6_routing_srh_opt_timestamp,
+            { "Timestamp", "ipv6.routing.srh.opt.timestamp",
+                FT_ABSOLUTE_TIME, ABSOLUTE_TIME_LOCAL, NULL, 0x00,
+                NULL, HFILL }
+        },
+        { &hf_ipv6_routing_srh_opt_timestamp_sec,
+            { "Timestamp (seconds)", "ipv6.routing.srh.opt.timestamp_sec",
+                FT_UINT32, BASE_DEC, NULL, 0x00,
+                NULL, HFILL }
+        },
+        { &hf_ipv6_routing_srh_opt_timestamp_nsec,
+            { "Timestamp (nanoseconds)", "ipv6.routing.srh.opt.timestamp_nsec",
+                FT_UINT32, BASE_DEC, NULL, 0x00,
+                NULL, HFILL }
+        },
+        { &hf_ipv6_routing_srh_opt_pt_sessid,
+            { "PT Session ID", "ipv6.routing.srh.opt._pt_sessid",
+                FT_UINT16, BASE_DEC, NULL, 0x00,
+                "PT Session ID", HFILL }
+        },
+        { &hf_ipv6_routing_srh_opt_pt_seqnum,
+            { "Probe Sequence Number", "ipv6.routing.srh.opt.pt_seqnum",
+                FT_UINT16, BASE_DEC, NULL, 0x00,
+                "Probe Sequence Number", HFILL }
+        },
+
         /* Compact Routing Header */
         { &hf_ipv6_routing_crh16_current_sid,
             { "Current SID", "ipv6.routing.crh16.current_sid",
@@ -4275,7 +4637,8 @@ proto_register_ipv6(void)
 
     static gint *ett_ipv6_routing[] = {
         &ett_ipv6_routing_proto,
-        &ett_ipv6_routing_srh_vect
+        &ett_ipv6_routing_srh_vect,
+        &ett_ipv6_routing_srh_time
     };
 
     static gint *ett_ipv6_fraghdr[] = {
