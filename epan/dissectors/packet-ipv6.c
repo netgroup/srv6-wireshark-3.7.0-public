@@ -1282,7 +1282,7 @@ dissect_routing6_srh(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *
     //offset = addr_offset + IPv6_ADDR_SIZE;
     offset = offset + (addr_count * IPv6_ADDR_SIZE);
     // ***** Prototipo di TLV dissector da sistemare bene quando funziona
-go_tlvs:
+go_tlvs: ; // <-- This is a workaround to avoid compile error. TO BE FIXED
     struct opt_proto_item {
         proto_item* type, * len;
     };
